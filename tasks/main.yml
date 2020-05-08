@@ -1,0 +1,65 @@
+---
+# tasks file for onionservice
+# TODO: change hardcoded user in path and templatise paths;
+- name: install tor packagee
+  openbsd_pkg:
+      name: tor
+      state: latest
+
+- name: make hidden service directory
+  #TODO:  test if mode is too permissive
+  file: 
+       path: "/home/ec2-user/{{ FQDN }}/hidden_service"
+       mode: '700'
+       owner: '_tor'
+       group: '_tor'
+       state: directory
+
+- name: modify the torrc
+  blockinfile:
+    path: /etc/tor/torrc
+    marker: "# {mark} {{ FQDN }} tor block "
+    block: |
+            HiddenServiceDir "/home/ec2-user/{{ FQDN }}/hidden_service"
+            HiddenServicePort 80 127.0.0.1:80
+
+- name: stop and start tor service
+  command: rcctl -f restart tor
+  register: tordaemonstatus
+  failed_when: tordaemonstatus.stdout.find('ok') == -1
+
+- name: register tor hostname var
+  command: cat "/home/ec2-user/{{ FQDN }}/hidden_service/hostname"
+  register: torhostname
+
+- debug:
+        msg: "{{ torhostname.stdout }}"
+
+- name: Update httpd conf
+  blockinfile:
+    path: /etc/httpd.conf
+    marker: "# {mark} {{ FQDN }} onion block "
+    block: |
+      server "{{ torhostname.stdout }}" {
+        listen on * port 80
+        root "/htdocs/{{ FQDN }}"
+        }
+
+- name: make sure the httpd configuration file is ok
+  command: httpd -n
+  register: httpdstatus
+  failed_when: httpdstatus.stderr.find('OK') == -1
+
+- name: restart httpd daemon
+  command: rcctl -f restart httpd
+  register: httpdrestart
+  failed_when: httpdrestart.stdout.find('ok') == -1
+
+- name: Save keys into /backup/onionservice/
+  fetch:
+    src: "{{ item }}"
+    dest: /backup/onionservice/
+  loop:
+    -  /home/ec2-user/{{ FQDN }}/hidden_service/hs_ed25519_public_key
+    -  /home/ec2-user/{{ FQDN }}/hidden_service/hs_ed25519_secret_key
+
