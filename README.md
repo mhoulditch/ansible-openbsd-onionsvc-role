@@ -1,5 +1,5 @@
-Role Name
-=========
+Role
+====
 
 A role to configure an onion service from a provisioned openbsd httpd site. Goal is to let users navigate to the portal without exiting the tor network rather than providing anonymity for the server.
 
